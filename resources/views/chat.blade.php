@@ -3,6 +3,7 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="csrf-token" content="{{ csrf_token() }}">
 
         <title>Laravel</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -50,29 +51,72 @@
     </body>
 
     <script>
-        $(document).ready(function () {
-            $("#send").click(function () {
-                let message = $("#message").val().trim();
-                if (message === "") return;
+        document.addEventListener("DOMContentLoaded", function () {
+            document.getElementById("send").addEventListener("click", function () {
+                let message = document.getElementById("message").value.trim();
+                if(message === "") return;
 
-                $("#chat-box").append('<div class="text-end" style="margin-left:15%"><div class="d-inline-block bg-primary text-white p-2 rounded-md mb-2">' + message + '</div></div>');
+                let chatBox = document.getElementById("chat-box");
+                let userMessage = document.createElement("div");
+                let loadingBox = document.createElement("div");
 
-                $("#message").val("");
+                userMessage.classList.add("text-end");
+                userMessage.style.marginLeft = "15%";
+                userMessage.innerHTML =`<div class="d-inline-block bg-primary text-white p-2 rounded-md mb-2">${message}</div>`;
 
-                $("#chat-box").scrollTop($("#chat-box")[0].scrollHeight);
+                loadingBox.classList.add("text-start");
+                loadingBox.innerHTML = "<div class='spinner-border' role='status'>" +
+                                            "<span class='visually-hidden'>Loading...</span>" +
+                                       "</div>";
 
-                $.post("/chat", { message: message, _token: "{{ csrf_token() }}" }, function (response) {
-                    $("#chat-box").append('<div class="text-start" style="margin-right:15%"><div class="d-inline-block bg-secondary text-white p-2 rounded-md mb-2"></div></div>')
-                        .find('.d-inline-block:last')
-                        .html(response.reply);
-                    $("#chat-box").scrollTop($("#chat-box")[0].scrollHeight);
+                chatBox.appendChild(userMessage);
+                chatBox.appendChild(loadingBox);
+
+                document.getElementById("message").value = "";
+
+                chatBox.scrollTop = chatBox.scrollHeight;
+
+                fetch("/chat", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
+                    },
+                    body: JSON.stringify({message: message})
+                })
+                .then(response => response.json())
+                .then(data => {
+                    chatBox.removeChild(loadingBox);
+                    let fullResponse = data.reply;
+                    let replyLength = fullResponse.length;
+                    let chunkSize = 1;
+                    let currentPos = 0;
+
+                    let botMessage = document.createElement("div");
+                    botMessage.classList.add("text-start");
+                    botMessage.style.marginRight = "15%";
+                    botMessage.innerHTML = `<div class="d-inline-block bg-secondary text-white p-2 rounded-md mb-2"></div>`;
+
+                    chatBox.appendChild(botMessage);
+
+                    let messageContainer = botMessage.querySelector('div');
+
+                    let interval = setInterval(function () {
+                        let chunk = fullResponse.substring(currentPos, currentPos + chunkSize);
+                        messageContainer.textContent += chunk;
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                        currentPos += chunkSize;
+
+                        if(currentPos >= replyLength){
+                            clearInterval(interval);
+                        }
+                    }, 20);
                 });
             });
-
-            $("#message").keypress(function (event) {
-                if (event.which === 13) {
+            document.getElementById("message").addEventListener("keypress", function (event) {
+                if(event.key === "Enter") {
                     event.preventDefault();
-                    $("#send").click();
+                    document.getElementById("send").click();
                 }
             });
         });
